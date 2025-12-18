@@ -11,7 +11,7 @@ android {
         }
     }
 
-    defaultConfig {
+        defaultConfig {
         applicationId "com.fongmi.android.tv"
         minSdk 24
         //noinspection ExpiredTargetSdkVersion
@@ -19,7 +19,10 @@ android {
         versionCode 499
         versionName "4.9.9"
         
-        // 在这里统一定义架构，生成 Universal APK
+        // 1. 核心修复：强制指定当子模块包含 abi 维度时，默认使用 arm64_v8a
+        // 这不会影响最终生成的 Universal APK 包含多架构，只是为了让编译通过
+        missingDimensionStrategy 'abi', 'arm64_v8a'
+
         ndk {
             abiFilters "armeabi-v7a", "arm64-v8a"
         }
@@ -31,24 +34,16 @@ android {
         }
     }
 
-        // ... 其他代码保持不变 ...
-
     flavorDimensions = ["mode"]
 
     productFlavors {
         leanback {
             dimension "mode"
-            // 关键：解决子模块多维度导致的 Ambiguity Error
-            matchingFallbacks = ['arm64_v8a', 'armeabi_v7a']
         }
         mobile {
             dimension "mode"
-            // 关键：解决子模块多维度导致的 Ambiguity Error
-            matchingFallbacks = ['arm64_v8a', 'armeabi_v7a']
         }
     }
-
-    // ... 其他代码保持不变 ...
 
 
     buildFeatures {
