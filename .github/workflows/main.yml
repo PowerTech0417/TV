@@ -1,23 +1,8 @@
-name: TVBox Universal Full Compatibility
+name: TVBox Universal Auto-Build
 
 on:
   workflow_dispatch:
-    inputs:
-      user_name:
-        description: 'GitHub用户名'
-        required: true
-        default: 'q215613905'
-        type: string
-      repo_name:
-        description: '仓库名'
-        required: true
-        default: 'TVBoxOS'
-        type: string
-      branch_name:
-        description: '分支名'
-        required: true
-        default: 'main'
-        type: string
+
 
 jobs:
   build:
@@ -65,52 +50,49 @@ jobs:
             chmod +x gradlew
           fi
 
-      - name: Advanced Flavor & ABI Fix (解决闪退关键)
+      - name: Advanced Compatibility Patch
         working-directory: TVBoxOSC
         run: |
-          echo "🏗️ Modification des Flavors pour la compatibilité totale..."
+          echo "🏗️ Patch de compatibilité universelle..."
           GRADLE_FILE="app/build.gradle"
           
           if [ -f "$GRADLE_FILE" ]; then
-            # 1. 移除 flavorDimensions 中的 "abi" 维度，只保留 "mode"
-            sed -i 's/flavorDimensions = \["mode", "abi"\]/flavorDimensions = ["mode"]/g' $GRADLE_FILE
+            # 1. 移除多维度，统一架构到 defaultConfig
+            sed -i 's/flavorDimensions = .*/flavorDimensions = ["mode"]/g' $GRADLE_FILE
             
-            # 2. 彻底删除原有的架构 Flavor (arm64_v8a 和 armeabi_v7a 块)
-            # 使用 sed 删除从 'arm64_v8a {' 到对应 '}' 的内容
-            sed -i '/arm64_v8a {/,/        }/d' $GRADLE_FILE
-            sed -i '/armeabi_v7a {/,/        }/d' $GRADLE_FILE
+            # 2. 删除原有的 ABI Flavor 块（防止干扰）
+            sed -i '/arm64_v8a {/,/}/d' $GRADLE_FILE
+            sed -i '/armeabi_v7a {/,/}/d' $GRADLE_FILE
             
-            # 3. 在 defaultConfig 中注入真正的全架构 ndk 配置
-            # 覆盖 armeabi-v7a, arm64-v8a 以及老旧设备的 x86
-            NDK_ALL='ndk { abiFilters "armeabi-v7a", "arm64-v8a" }'
-            sed -i "s/defaultConfig {/defaultConfig { $NDK_ALL /g" $GRADLE_FILE
+            # 3. 注入全架构支持 (32位 + 64位)
+            NDK_CONF='ndk { abiFilters "armeabi-v7a", "arm64-v8a" }'
+            sed -i "s/defaultConfig {/defaultConfig { $NDK_CONF /g" $GRADLE_FILE
             
-            # 4. 修复文件名输出逻辑 (因为我们删除了一个维度，不修改这里构建会失败)
+            # 4. 修复文件名逻辑，移除对不存在维度的引用
             sed -i 's/variant.productFlavors\[1\].name/"universal"/g' $GRADLE_FILE
-            
-            echo "✅ Flavors modifiés avec succès."
           fi
-          
-      - name: Build All Variations
+
+      - name: Build with Gradle
         working-directory: TVBoxOSC
         run: |
-          echo "🚀 Lancement de la compilation (Leanback + Mobile)..."
-          # 构建 LeanbackRelease 和 MobileRelease
-          ./gradlew assembleLeanbackRelease assembleMobileRelease --stacktrace
+          echo "🚀 Compilation de tous les variants..."
+          # 使用 assembleRelease 会自动编译所有剩余的 Flavor (Leanback 和 Mobile)
+          ./gradlew assembleRelease --stacktrace
           
-      - name: Process and Rename APKs
+      - name: Organize Output
         working-directory: TVBoxOSC
         run: |
           mkdir -p output/release
-          # 寻找生成的 APK 并统一命名
+          # 递归寻找所有生成的 APK 并移动到统一目录
           find app/build/outputs/apk/ -name "*.apk" -type f | while read file; do
-            NAME=$(basename "$file")
-            # 转换为：leanback-universal.apk 或 mobile-universal.apk
-            cp "$file" "output/release/$NAME"
+            # 获取文件名并清理掉不必要的路径
+            FILENAME=$(basename "$file")
+            echo "📦 Traitement de : $FILENAME"
+            cp "$file" "output/release/$FILENAME"
           done
 
-      - name: Upload Universal APKs
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: TVBox-Universal-Full-Compatible
+          name: TVBox-Universal-Release
           path: TVBoxOSC/output/release/*.apk
