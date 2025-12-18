@@ -11,7 +11,7 @@ android {
         }
     }
 
-        defaultConfig {
+    defaultConfig {
         applicationId "com.fongmi.android.tv"
         minSdk 24
         //noinspection ExpiredTargetSdkVersion
@@ -19,8 +19,7 @@ android {
         versionCode 499
         versionName "4.9.9"
         
-        // 1. 核心修复：强制指定当子模块包含 abi 维度时，默认使用 arm64_v8a
-        // 这不会影响最终生成的 Universal APK 包含多架构，只是为了让编译通过
+        // 解决子模块维度冲突
         missingDimensionStrategy 'abi', 'arm64_v8a'
 
         ndk {
@@ -39,12 +38,17 @@ android {
     productFlavors {
         leanback {
             dimension "mode"
+            // 修复 Java 代码中的 BuildConfig 引用报错
+            buildConfigField "String", "FLAVOR_mode", "\"leanback\""
+            buildConfigField "String", "FLAVOR_abi", "\"universal\""
         }
         mobile {
             dimension "mode"
+            // 修复 Java 代码中的 BuildConfig 引用报错
+            buildConfigField "String", "FLAVOR_mode", "\"mobile\""
+            buildConfigField "String", "FLAVOR_abi", "\"universal\""
         }
     }
-
 
     buildFeatures {
         buildConfig true
@@ -66,7 +70,7 @@ android {
         }
     }
 
-    // 修改后的输出命名逻辑，适应单维度
+    // 自动命名生成的 APK 文件
     android.applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
             outputFileName = "${variant.productFlavors[0].name}-${variant.buildType.name}-${variant.versionName}.apk"
