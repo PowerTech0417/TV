@@ -18,6 +18,12 @@ android {
         targetSdk 28
         versionCode 499
         versionName "4.9.9"
+        
+        // 在这里统一定义架构，生成 Universal APK
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a"
+        }
+
         javaCompileOptions {
             annotationProcessorOptions {
                 arguments = ["room.schemaLocation": "$projectDir/schemas".toString(), "eventBusIndex": "com.fongmi.android.tv.event.EventIndex"]
@@ -25,7 +31,8 @@ android {
         }
     }
 
-    flavorDimensions = ["mode", "abi"]
+    // 简化为单一维度
+    flavorDimensions = ["mode"]
 
     productFlavors {
         leanback {
@@ -33,14 +40,6 @@ android {
         }
         mobile {
             dimension "mode"
-        }
-        arm64_v8a {
-            dimension "abi"
-            ndk { abiFilters "arm64-v8a" }
-        }
-        armeabi_v7a {
-            dimension "abi"
-            ndk { abiFilters "armeabi-v7a" }
         }
     }
 
@@ -64,9 +63,10 @@ android {
         }
     }
 
+    // 修改后的输出命名逻辑，适应单维度
     android.applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
-            outputFileName = "${variant.productFlavors[0].name}-${variant.productFlavors[1].name}.apk"
+            outputFileName = "${variant.productFlavors[0].name}-${variant.buildType.name}-${variant.versionName}.apk"
         }
     }
 
