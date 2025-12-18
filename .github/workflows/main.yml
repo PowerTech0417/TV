@@ -1,0 +1,116 @@
+name: TVBox Universal Full Compatibility
+
+on:
+  workflow_dispatch:
+    inputs:
+      user_name:
+        description: 'GitHub用户名'
+        required: true
+        default: 'q215613905'
+        type: string
+      repo_name:
+        description: '仓库名'
+        required: true
+        default: 'TVBoxOS'
+        type: string
+      branch_name:
+        description: '分支名'
+        required: true
+        default: 'main'
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Workflow Code
+        uses: actions/checkout@v4
+        
+      - name: Clone Source Code
+        run: |
+          echo "📥 Clonage du dépôt..."
+          git clone https://github.com/${{ github.event.inputs.user_name }}/${{ github.event.inputs.repo_name }}.git TVBoxOSC
+          cd TVBoxOSC
+          git checkout ${{ github.event.inputs.branch_name }}
+          
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - name: Prepare Build Environment
+        working-directory: TVBoxOSC
+        run: |
+          echo "🔧 Configuration de l'environnement..."
+          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+          
+          PYTHON_PATH=$(which python3)
+          echo "chaquopy.python=$PYTHON_PATH" >> gradle.properties
+          echo "chaquopy.pip=install" >> gradle.properties
+          
+          # 修复 Python 路径
+          find . -name "*.gradle" -type f -exec sed -i "s|D:/Programs/Python/Python38/python.exe|$PYTHON_PATH|g" {} \;
+          
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+          fi
+
+      - name: Advanced Flavor & ABI Fix (解决闪退关键)
+        working-directory: TVBoxOSC
+        run: |
+          echo "🏗️ Modification des Flavors pour la compatibilité totale..."
+          GRADLE_FILE="app/build.gradle"
+          
+          if [ -f "$GRADLE_FILE" ]; then
+            # 1. 移除 flavorDimensions 中的 "abi" 维度，只保留 "mode"
+            sed -i 's/flavorDimensions = \["mode", "abi"\]/flavorDimensions = ["mode"]/g' $GRADLE_FILE
+            
+            # 2. 彻底删除原有的架构 Flavor (arm64_v8a 和 armeabi_v7a 块)
+            # 使用 sed 删除从 'arm64_v8a {' 到对应 '}' 的内容
+            sed -i '/arm64_v8a {/,/        }/d' $GRADLE_FILE
+            sed -i '/armeabi_v7a {/,/        }/d' $GRADLE_FILE
+            
+            # 3. 在 defaultConfig 中注入真正的全架构 ndk 配置
+            # 覆盖 armeabi-v7a, arm64-v8a 以及老旧设备的 x86
+            NDK_ALL='ndk { abiFilters "armeabi-v7a", "arm64-v8a" }'
+            sed -i "s/defaultConfig {/defaultConfig { $NDK_ALL /g" $GRADLE_FILE
+            
+            # 4. 修复文件名输出逻辑 (因为我们删除了一个维度，不修改这里构建会失败)
+            sed -i 's/variant.productFlavors\[1\].name/"universal"/g' $GRADLE_FILE
+            
+            echo "✅ Flavors modifiés avec succès."
+          fi
+          
+      - name: Build All Variations
+        working-directory: TVBoxOSC
+        run: |
+          echo "🚀 Lancement de la compilation (Leanback + Mobile)..."
+          # 构建 LeanbackRelease 和 MobileRelease
+          ./gradlew assembleLeanbackRelease assembleMobileRelease --stacktrace
+          
+      - name: Process and Rename APKs
+        working-directory: TVBoxOSC
+        run: |
+          mkdir -p output/release
+          # 寻找生成的 APK 并统一命名
+          find app/build/outputs/apk/ -name "*.apk" -type f | while read file; do
+            NAME=$(basename "$file")
+            # 转换为：leanback-universal.apk 或 mobile-universal.apk
+            cp "$file" "output/release/$NAME"
+          done
+
+      - name: Upload Universal APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: TVBox-Universal-Full-Compatible
+          path: TVBoxOSC/output/release/*.apk
