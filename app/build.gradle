@@ -31,17 +31,25 @@ android {
         }
     }
 
-    // 简化为单一维度
+        // ... 其他代码保持不变 ...
+
     flavorDimensions = ["mode"]
 
     productFlavors {
         leanback {
             dimension "mode"
+            // 关键：解决子模块多维度导致的 Ambiguity Error
+            matchingFallbacks = ['arm64_v8a', 'armeabi_v7a']
         }
         mobile {
             dimension "mode"
+            // 关键：解决子模块多维度导致的 Ambiguity Error
+            matchingFallbacks = ['arm64_v8a', 'armeabi_v7a']
         }
     }
+
+    // ... 其他代码保持不变 ...
+
 
     buildFeatures {
         buildConfig true
