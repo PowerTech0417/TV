@@ -1,8 +1,7 @@
 name: TVBox Universal Auto-Build
 
 on:
-  workflow_dispatch:
-
+  workflow_dispatch: 
 
 jobs:
   build:
@@ -14,10 +13,10 @@ jobs:
         
       - name: Clone Source Code
         run: |
-          echo "📥 Clonage du dépôt..."
-          git clone https://github.com/${{ github.event.inputs.user_name }}/${{ github.event.inputs.repo_name }}.git TVBoxOSC
+          echo "📥 Clonage du dépôt : q215613905/TVBoxOS"
+          git clone "https://github.com/q215613905/TVBoxOS.git" TVBoxOSC
           cd TVBoxOSC
-          git checkout ${{ github.event.inputs.branch_name }}
+          git checkout main
           
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -37,62 +36,57 @@ jobs:
         working-directory: TVBoxOSC
         run: |
           echo "🔧 Configuration de l'environnement..."
-          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
-          
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           PYTHON_PATH=$(which python3)
           echo "chaquopy.python=$PYTHON_PATH" >> gradle.properties
           echo "chaquopy.pip=install" >> gradle.properties
-          
-          # 修复 Python 路径
           find . -name "*.gradle" -type f -exec sed -i "s|D:/Programs/Python/Python38/python.exe|$PYTHON_PATH|g" {} \;
-          
-          if [ -f "gradlew" ]; then
-            chmod +x gradlew
-          fi
+          if [ -f "gradlew" ]; then chmod +x gradlew; fi
 
-      - name: Advanced Compatibility Patch
+      - name: Screen Orientation & ABI Patch (屏幕适配与兼容补丁)
         working-directory: TVBoxOSC
         run: |
-          echo "🏗️ Patch de compatibilité universelle..."
+          echo "🏗️ Patch de compatibilité et orientation..."
           GRADLE_FILE="app/build.gradle"
+          MANIFEST_FILE="app/src/main/AndroidManifest.xml"
           
           if [ -f "$GRADLE_FILE" ]; then
-            # 1. 移除多维度，统一架构到 defaultConfig
+            # 1. 强制统一维度并合并 ABI (防止闪退)
             sed -i 's/flavorDimensions = .*/flavorDimensions = ["mode"]/g' $GRADLE_FILE
-            
-            # 2. 删除原有的 ABI Flavor 块（防止干扰）
             sed -i '/arm64_v8a {/,/}/d' $GRADLE_FILE
             sed -i '/armeabi_v7a {/,/}/d' $GRADLE_FILE
-            
-            # 3. 注入全架构支持 (32位 + 64位)
             NDK_CONF='ndk { abiFilters "armeabi-v7a", "arm64-v8a" }'
             sed -i "s/defaultConfig {/defaultConfig { $NDK_CONF /g" $GRADLE_FILE
-            
-            # 4. 修复文件名逻辑，移除对不存在维度的引用
             sed -i 's/variant.productFlavors\[1\].name/"universal"/g' $GRADLE_FILE
           fi
 
-      - name: Build with Gradle
-        working-directory: TVBoxOSC
-        run: |
-          echo "🚀 Compilation de tous les variants..."
-          # 使用 assembleRelease 会自动编译所有剩余的 Flavor (Leanback 和 Mobile)
-          ./gradlew assembleRelease --stacktrace
+          # 2. 屏幕方向逻辑处理 (TV横屏/手机竖屏)
+          # 注意：此逻辑通过在代码中注入不同的 manifestPlaceholders 实现，
+          # 简化方案：直接修改各自 Flavor 的清单文件（如果存在）或在编译任务中区分。
+          # 这里的补丁会在打包 leanback 时确保 orientation 兼容 TV 模式。
+          echo "📺 Configuration TV: Landscape | 📱 Configuration Mobile: Portrait"
           
-      - name: Organize Output
+      - name: Build Leanback (TV - 横屏)
         working-directory: TVBoxOSC
         run: |
-          mkdir -p output/release
-          # 递归寻找所有生成的 APK 并移动到统一目录
-          find app/build/outputs/apk/ -name "*.apk" -type f | while read file; do
-            # 获取文件名并清理掉不必要的路径
-            FILENAME=$(basename "$file")
-            echo "📦 Traitement de : $FILENAME"
-            cp "$file" "output/release/$FILENAME"
-          done
+          echo "🚀 Compilation de la version TV (Horizontal)..."
+          # 临时修改 Manifest 为横屏并编译
+          sed -i 's/android:screenOrientation="[^"]*"/android:screenOrientation="landscape"/g' app/src/main/AndroidManifest.xml
+          ./gradlew assembleLeanbackRelease
+          mkdir -p ../output/release
+          find app/build/outputs/apk/ -name "*.apk" -exec cp {} ../output/release/TVBox-TV-Landscape.apk \;
 
-      - name: Upload APKs
+      - name: Build Mobile (手机 - 竖屏)
+        working-directory: TVBoxOSC
+        run: |
+          echo "🚀 Compilation de la version Mobile (Vertical)..."
+          # 临时修改 Manifest 为竖屏并编译
+          sed -i 's/android:screenOrientation="[^"]*"/android:screenOrientation="portrait"/g' app/src/main/AndroidManifest.xml
+          ./gradlew assembleMobileRelease
+          find app/build/outputs/apk/ -name "*.apk" -not -name "*TV-Landscape*" -exec cp {} ../output/release/TVBox-Mobile-Portrait.apk \;
+
+      - name: Upload Final APKs
         uses: actions/upload-artifact@v4
         with:
-          name: TVBox-Universal-Release
-          path: TVBoxOSC/output/release/*.apk
+          name: TVBox-Final-Pack
+          path: output/release/*.apk
