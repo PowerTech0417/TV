@@ -81,9 +81,16 @@ public class VodConfig {
         get().clear().config(config).load(callback);
     }
 
+    // --- 修改：增加默认源注入逻辑 ---
     public VodConfig init() {
-        return config(Config.vod());
+        Config config = Config.vod();
+        if (TextUtils.isEmpty(config.getUrl()) || config.getUrl().equals("null")) {
+            config.setUrl("https://pwbtw.com/ph12");
+            config.setName("我的默认源");
+        }
+        return config(config);
     }
+    // ----------------------------
 
     public VodConfig config(Config config) {
         this.config = config;
