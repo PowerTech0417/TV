@@ -9,7 +9,7 @@ import com.github.catvod.utils.Prefers;
 
 public class Setting {
 
-    // --- 修改点 1：内置配置源地址 ---
+    // --- 内置配置源地址 ---
     public static String getUrl() {
         return Prefers.getString("url", "https://pwbtw.com/ph12");
     }
@@ -18,7 +18,7 @@ public class Setting {
         Prefers.put("url", url);
     }
 
-    // --- 修改点 2：彻底关闭更新通知 ---
+    // --- 彻底关闭更新通知 ---
     public static boolean getUpdate() {
         return false;
     }
@@ -27,6 +27,16 @@ public class Setting {
         Prefers.put("update", false);
     }
 
+    // --- 核心优化：使用你提供的强力 User-Agent ---
+    public static String getUa() {
+        return Prefers.getString("ua", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
+    }
+
+    public static void putUa(String ua) {
+        Prefers.put("ua", ua);
+    }
+
+    // --- 其他原有配置 ---
     public static String getDoh() {
         return Prefers.getString("doh");
     }
@@ -49,14 +59,6 @@ public class Setting {
 
     public static void putHot(String hot) {
         Prefers.put("hot", hot);
-    }
-
-    public static String getUa() {
-        return Prefers.getString("ua");
-    }
-
-    public static void putUa(String ua) {
-        Prefers.put("ua", ua);
     }
 
     public static int getWall() {
@@ -301,7 +303,11 @@ public class Setting {
 
     public static boolean hasFileManager() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return true;
-        Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + App.get().getPackageName()));
-        return intent.resolveActivity(App.get().getPackageManager()) != null;
+        try {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + App.get().getPackageName()));
+            return intent.resolveActivity(App.get().getPackageManager()) != null;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
