@@ -1,6 +1,5 @@
 package com.fongmi.android.tv;
 
-
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -10,16 +9,23 @@ import com.github.catvod.utils.Prefers;
 
 public class Setting {
 
-    // --- 新增：默认配置源地址 ---
+    // --- 修改点 1：内置配置源地址 ---
     public static String getUrl() {
-        // 默认返回你的源地址
         return Prefers.getString("url", "https://pwbtw.com/ph12");
     }
 
     public static void putUrl(String url) {
         Prefers.put("url", url);
     }
-    // -----------------------
+
+    // --- 修改点 2：彻底关闭更新通知 ---
+    public static boolean getUpdate() {
+        return false;
+    }
+
+    public static void putUpdate(boolean update) {
+        Prefers.put("update", false);
+    }
 
     public static String getDoh() {
         return Prefers.getString("doh");
@@ -181,18 +187,6 @@ public class Setting {
         Prefers.put("change", change);
     }
 
-    // --- 修改：彻底关闭更新通知 ---
-    public static boolean getUpdate() {
-        // 强制返回 false，不再检查更新
-        return false;
-    }
-
-    public static void putUpdate(boolean update) {
-        // 无论传入什么，始终存储为 false
-        Prefers.put("update", false);
-    }
-    // -----------------------
-
     public static boolean isCaption() {
         return Prefers.getBoolean("caption");
     }
@@ -266,7 +260,7 @@ public class Setting {
     }
 
     public static float getSpeed() {
-        return Math.min(Math.max(Prefers.getFloat("speed", 3), 2), 5);
+        return Math.min(Math.max(Prefers.getFloat("speed", 3.0f), 2.0f), 5.0f);
     }
 
     public static void putSpeed(float speed) {
@@ -306,6 +300,8 @@ public class Setting {
     }
 
     public static boolean hasFileManager() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && (new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + App.get().getPackageName())).resolveActivity(App.get().getPackageName())).resolveActivity(App.get().getPackageManager()) != null || new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).resolveActivity(App.get().getPackageName()) != null;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return true;
+        Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + App.get().getPackageName()));
+        return intent.resolveActivity(App.get().getPackageManager()) != null;
     }
 }
