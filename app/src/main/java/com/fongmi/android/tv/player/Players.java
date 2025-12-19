@@ -421,8 +421,10 @@ public class Players implements Player.Listener, ParseCallback {
     }
 
     public void start(Result result, boolean useParse, long timeout) {
+        // 修改：增加更宽松的 DRM 支持检测
         if (result.getDrm() != null && !FrameworkMediaDrm.isCryptoSchemeSupported(result.getDrm().getUUID())) {
-            ErrorEvent.drm(tag);
+            // 如果硬件不支持该 UUID，我们依然尝试播放（通过之前 ExoUtil 改好的软件解码逻辑回退）
+            setMediaItem(result, timeout);
         } else if (result.hasMsg()) {
             ErrorEvent.extract(tag, result.getMsg());
         } else if (result.getParse() == 1 || result.getJx() == 1) {
@@ -546,7 +548,9 @@ public class Players implements Player.Listener, ParseCallback {
 
             @Override
             public void onLoadFailed(@Nullable Drawable errorDrawable) {
-                builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, ((BitmapDrawable) errorDrawable).getBitmap());
+                if (errorDrawable instanceof BitmapDrawable) {
+                    builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, ((BitmapDrawable) errorDrawable).getBitmap());
+                }
                 session.setMetadata(builder.build());
                 ActionEvent.update();
             }
@@ -663,26 +667,37 @@ public class Players implements Player.Listener, ParseCallback {
 
     @Override
     public void onPlayerError(@NonNull PlaybackException error) {
-        if (retried()) ErrorEvent.extract(tag, provider.get(error));
-        else switch (error.errorCode) {
-            case PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW:
-                seekToDefaultPosition();
-                break;
-            case PlaybackException.ERROR_CODE_DECODER_INIT_FAILED:
-            case PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED:
-            case PlaybackException.ERROR_CODE_DECODING_FAILED:
-                toggleDecode();
-                break;
-            case PlaybackException.ERROR_CODE_IO_UNSPECIFIED:
-            case PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED:
-            case PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED:
-            case PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED:
-            case PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED:
-                setFormat(ExoUtil.getMimeType(error.errorCode));
-                break;
-            default:
-                ErrorEvent.extract(tag, provider.get(error));
-                break;
+        if (retried()) {
+            ErrorEvent.extract(tag, provider.get(error));
+        } else {
+            switch (error.errorCode) {
+                case PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW:
+                    seekToDefaultPosition();
+                    break;
+                case PlaybackException.ERROR_CODE_DRM_LICENSE_ACQUISITION_FAILED:
+                case PlaybackException.ERROR_CODE_DRM_PROVISIONING_FAILED:
+                case PlaybackException.ERROR_CODE_DRM_SCHEME_UNSUPPORTED:
+                    // 关键修复：当报 DRM 相关错误时，尝试切换软解模式重新播放
+                    toggleDecode();
+                    break;
+                case PlaybackException.ERROR_CODE_DECODER_INIT_FAILED:
+                case PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED:
+                case PlaybackException.ERROR_CODE_DECODING_FAILED:
+                    toggleDecode();
+                    break;
+                case PlaybackException.ERROR_CODE_IO_UNSPECIFIED:
+                case PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND:
+                case PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED:
+                case PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED:
+                case PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED:
+                case PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED:
+                case PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED:
+                    setFormat(ExoUtil.getMimeType(error.errorCode));
+                    break;
+                default:
+                    ErrorEvent.extract(tag, provider.get(error));
+                    break;
+            }
         }
     }
 }
