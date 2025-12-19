@@ -35,7 +35,9 @@ import java.util.Map;
 public class ExoUtil {
 
     public static String getUa() {
-        return Util.getUserAgent(App.get(), BuildConfig.APPLICATION_ID);
+        String ua = Setting.getUa();
+        if (TextUtils.isEmpty(ua)) return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36";
+        return ua;
     }
 
     public static LoadControl buildLoadControl() {
@@ -47,13 +49,14 @@ public class ExoUtil {
         DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters();
         if (Setting.isPreferAAC()) builder.setPreferredAudioMimeType(MimeTypes.AUDIO_AAC);
         builder.setPreferredTextLanguage(Locale.getDefault().getISO3Language());
-        builder.setTunnelingEnabled(Setting.isTunnel());
+        builder.setTunnelingEnabled(false); // 强制关闭隧道模式，提高兼容性
         builder.setForceHighestSupportedBitrate(true);
         trackSelector.setParameters(builder.build());
         return trackSelector;
     }
 
     public static RenderersFactory buildRenderersFactory(int renderMode) {
+        // 开启解码器回退，当硬件 DRM 不支持时，尝试软件解码播放
         return new DefaultRenderersFactory(App.get()).setEnableDecoderFallback(true).setExtensionRendererMode(renderMode);
     }
 
@@ -74,9 +77,13 @@ public class ExoUtil {
 
     public static String getMimeType(String path) {
         if (TextUtils.isEmpty(path)) return "";
-        if (path.endsWith(".vtt")) return MimeTypes.TEXT_VTT;
-        if (path.endsWith(".ssa") || path.endsWith(".ass")) return MimeTypes.TEXT_SSA;
-        if (path.endsWith(".ttml") || path.endsWith(".xml") || path.endsWith(".dfxp")) return MimeTypes.APPLICATION_TTML;
+        String url = path.toLowerCase();
+        if (url.contains(".vtt")) return MimeTypes.TEXT_VTT;
+        if (url.contains(".ssa") || url.contains(".ass")) return MimeTypes.TEXT_SSA;
+        if (url.contains(".ttml") || url.contains(".xml") || url.contains(".dfxp")) return MimeTypes.APPLICATION_TTML;
+        if (url.contains(".m3u8")) return MimeTypes.APPLICATION_M3U8;
+        if (url.contains(".mpd")) return MimeTypes.APPLICATION_MPD;
+        if (url.contains(".mp4")) return MimeTypes.VIDEO_MP4;
         return MimeTypes.APPLICATION_SUBRIP;
     }
 
@@ -89,8 +96,22 @@ public class ExoUtil {
         MediaItem.Builder builder = new MediaItem.Builder().setUri(uri);
         builder.setRequestMetadata(getRequestMetadata(headers, uri));
         builder.setSubtitleConfigurations(getSubtitleConfigs(subs));
-        if (drm != null) builder.setDrmConfiguration(drm.get());
-        if (mimeType != null) builder.setMimeType(mimeType);
+        
+        if (drm != null) {
+            // 增强 DRM 兼容性处理
+            MediaItem.DrmConfiguration.Builder drmBuilder = drm.get().buildUpon();
+            drmBuilder.setMultiSession(true);
+            drmBuilder.setForceDefaultLicenseUri(true);
+            builder.setDrmConfiguration(drmBuilder.build());
+        }
+
+        // 如果没有提供 mimeType，根据后缀自动推断
+        if (mimeType != null) {
+            builder.setMimeType(mimeType);
+        } else {
+            builder.setMimeType(getMimeType(uri.toString()));
+        }
+
         builder.setMediaId(uri.toString());
         builder.setImageDurationMs(15000);
         return builder.build();
